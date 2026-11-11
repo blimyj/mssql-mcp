@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mssql-mcp configuration</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd;
+  --code-bg: #f1f0ec; --accent: #2f6fdb; --ok: #1f8a5b; --err: #c2412d; --chip: #ecebe6;
+  --cfg-bg: #eef3fc; --cfg-line: #cfdcf3;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151514; --panel: #1d1d1c; --ink: #ecebe6; --muted: #9a9993; --line: #2e2e2c;
+    --code-bg: #121211; --accent: #7aa7ff; --ok: #4fc58d; --err: #ff7a62; --chip: #2a2a28;
+    --cfg-bg: #17202e; --cfg-line: #26344a; }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 40px 16px 80px; }
+h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+.lede { color: var(--muted); margin: 0; max-width: 72ch; }
+nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; }
+nav a { text-decoration: none; color: var(--ink); background: var(--chip); padding: 5px 11px;
+  border-radius: 999px; font-size: 13px; }
+nav a:hover { background: var(--line); }
+.part { margin-top: 56px; padding-top: 8px; border-top: 1px solid var(--line); }
+.part > h2 { font-size: 22px; margin: 16px 0 4px; }
+.part > p { color: var(--muted); margin: 0 0 18px; max-width: 75ch; }
+h3 { font-size: 17px; margin: 0 0 4px; }
+code, pre { font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+p code, li code, td code { background: var(--chip); padding: 1px 5px; border-radius: 4px; }
+pre { margin: 0; padding: 12px 14px; background: var(--code-bg); overflow-x: auto; white-space: pre; max-height: 420px; }
+pre.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.err-text { color: var(--err); }
+
+/* Steps */
+.steps { counter-reset: step; display: grid; gap: 14px; }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.step-head { padding: 12px 14px 4px; }
+.step-head h3::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center;
+  width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: var(--accent); color: var(--panel);
+  font-size: 12px; vertical-align: 1px; }
+.step-head p { margin: 2px 0 10px; color: var(--muted); font-size: 14px; }
+.file { font-size: 11.5px; color: var(--muted); padding: 6px 14px; border-top: 1px solid var(--line);
+  font-family: ui-monospace, Menlo, monospace; }
+
+/* Reference table */
+.table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 760px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td a { color: var(--accent); white-space: nowrap; }
+.precedence { margin: 14px 0 0; color: var(--muted); font-size: 13.5px; }
+
+/* Scenarios */
+.scenario { margin-top: 34px; scroll-margin-top: 16px; }
+.scenario .meta { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.setting { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--cfg-bg);
+  border: 1px solid var(--cfg-line); padding: 1px 8px; border-radius: 999px; }
+.scenario > p { color: var(--muted); margin: 4px 0 12px; max-width: 80ch; font-size: 14px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 800px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.variant { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-width: 0; }
+.variant-label { padding: 9px 14px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--line); }
+.cfg { background: var(--cfg-bg); border-bottom: 1px solid var(--cfg-line); }
+.cfg .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 14px 0; }
+.cfg pre { background: transparent; padding-top: 4px; }
+.call-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 8px 14px;
+  border-top: 1px solid var(--line); }
+.call-head:first-of-type { border-top: 0; }
+.tool { font-weight: 600; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+.args { color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+  overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.badge { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.badge.ok { color: var(--ok); } .badge.err { color: var(--err); }
+.instr { border-top: 1px dashed var(--line); }
+.instr .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 14px 0; }
+.stat { font-size: 12px; color: var(--muted); padding: 6px 14px; border-top: 1px solid var(--line); }
+
+/* Tour */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+.note { font-size: 13px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--line); }
+footer { margin-top: 56px; color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>mssql-mcp configuration</h1>
+  <p class="lede">How to set up the SQL Server MCP server, and what each setting changes for the agent using it.
+    Every response below is real output captured from the local test server (<code>TestShop</code> and
+    <code>Inventory</code> databases).</p>
+  <nav>
+    <a href="#configure">How to configure</a>
+    <a href="#reference">Settings reference</a>
+    <a href="#effects">How config changes the MCP</a>
+    <a href="#tour">Tool tour</a>
+  </nav>
+
+  <!-- ─────────────── How to configure ─────────────── -->
+  <section class="part" id="configure">
+    <h2>How to configure</h2>
+    <p>Two files hold the configuration: <code>.env</code> for secrets and global behavior, and an optional
+      <code>databases.json</code> listing the databases. Both sit in the <code>mssql-mcp</code> folder and are
+      git-ignored. Your MCP client only needs the path to the server.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-head"><h3>Build the server</h3>
+          <p>Once, and again after pulling changes.</p></div>
+        <pre>cd mssql-mcp
+cp .env.example .env
+npm install
+npm run build</pre>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><h3>Put secrets and global settings in .env</h3>
+          <p>With only one database you can stop here: the connection settings in <code>.env</code> define it.
+            With <code>databases.json</code> present, <code>.env</code> just supplies passwords and global behavior.</p></div>
+        <pre># Connection (used when there is no databases.json)
+MSSQL_SERVER=localhost
+MSSQL_PORT=1434
+MSSQL_USER=mcp_reader
+MSSQL_PASSWORD=••••••••          # referenced from databases.json via "passwordEnv"
+MSSQL_DATABASE=TestShop
+MSSQL_TRUST_SERVER_CERT=true
+
+# Behavior
+MSSQL_READONLY=true              # only SELECT / WITH
+MSSQL_OUTPUT=compact             # or pretty
+MSSQL_EXCLUDE_SCHEMAS=           # comma list, hidden on every database
+MSSQL_ALLOW_EXCLUDED_OVERRIDE=true
+MSSQL_RATE_MAX=3                 # requests per window (0 = off)
+MSSQL_RATE_WINDOW_MS=10000
+MSSQL_MAX_CONCURRENT=1</pre>
+        <div class="file">mssql-mcp/.env</div>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><h3>List databases in databases.json (optional)</h3>
+          <p>Each entry inherits from <code>defaults</code>. Keys are the names agents pass as <code>db</code>.
+            This is the file the test server runs with:</p></div>
+        <pre id="base-config"></pre>
+        <div class="file">mssql-mcp/databases.json · template: databases.example.json</div>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><h3>Register it with your client</h3>
+          <p>The client starts the server itself. No secrets go here.</p></div>
+        <div class="grid2" style="padding: 0 14px 14px; gap: 10px;">
+          <div><div class="file" style="border:0;padding:0 0 4px">opencode.json</div><pre>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mssql": {
+      "type": "local",
+      "command": ["node", "/path/to/mssql-mcp/dist/index.js"],
+      "enabled": true
+    }
+  }
+}</pre></div>
+          <div><div class="file" style="border:0;padding:0 0 4px">.mcp.json (Claude Code)</div><pre>{
+  "mcpServers": {
+    "mssql": {
+      "command": "node",
+      "args": ["/path/to/mssql-mcp/dist/index.js"]
+    }
+  }
+}</pre></div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><h3>Restart the client and check</h3>
+          <p>Settings are read when the server starts, so restart the client after any change.</p></div>
+        <pre>$ opencode mcp list
+●  ✓ mssql connected</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── Reference ─────────────── -->
+  <section class="part" id="reference">
+    <h2>Settings reference</h2>
+    <p>Per-database keys go in a <code>databases.json</code> entry or in its <code>defaults</code>. Environment
+      variables go in <code>.env</code> (or the client's <code>env</code> block).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Where</th><th>Default</th><th>Effect</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><code>server</code> <code>port</code> <code>database</code> <code>user</code></td><td>databases.json · <code>MSSQL_SERVER</code> …</td><td>localhost · 1433 · master</td><td>Where to connect.</td><td></td></tr>
+        <tr><td><code>password</code> / <code>passwordEnv</code></td><td>databases.json · <code>MSSQL_PASSWORD</code></td><td>MSSQL_PASSWORD</td><td><code>passwordEnv</code> names a variable in .env, keeping secrets out of the JSON.</td><td></td></tr>
+        <tr><td><code>encrypt</code> <code>trustServerCertificate</code></td><td>databases.json · <code>MSSQL_ENCRYPT</code> <code>MSSQL_TRUST_SERVER_CERT</code></td><td>true · true</td><td>TLS. Set trust to false for servers with a real certificate.</td><td></td></tr>
+        <tr><td><code>default</code></td><td>databases.json</td><td>first entry</td><td>Database used when a call has no <code>db</code>.</td><td><a href="#s-default-db">see effect</a></td></tr>
+        <tr><td><code>summary</code></td><td>databases.json · <code>MSSQL_SUMMARY</code></td><td>description's first line</td><td>What the database is and when to use it. Sent on connect.</td><td><a href="#s-description">see effect</a></td></tr>
+        <tr><td><code>description</code> / <code>descriptionFile</code></td><td>databases.json · <code>MSSQL_DESCRIPTION</code> <code>MSSQL_DESCRIPTION_FILE</code></td><td>none</td><td>Full notes, e.g. how to query it. Loaded by <code>describe_database</code>.</td><td><a href="#s-description">see effect</a></td></tr>
+        <tr><td><code>excludeSchemas</code></td><td>databases.json (merged with defaults) · <code>MSSQL_EXCLUDE_SCHEMAS</code> (all dbs)</td><td>none</td><td>Hide schemas from listings; refuse queries naming them.</td><td><a href="#s-exclude">see effect</a></td></tr>
+        <tr><td><code>includeExcludedSchemas</code></td><td>tool argument</td><td>false</td><td>Lifts the exclusions for one call, when the user really needs that data.</td><td><a href="#s-override">see effect</a></td></tr>
+        <tr><td><code>allowExcludedOverride</code></td><td>databases.json · <code>MSSQL_ALLOW_EXCLUDED_OVERRIDE</code></td><td>true</td><td>Set false to make exclusions absolute (the flag is refused).</td><td><a href="#s-locked">see effect</a></td></tr>
+        <tr><td><code>readonly</code></td><td>databases.json · <code>MSSQL_READONLY</code></td><td>true</td><td>Only single SELECT / WITH statements pass the guard. Only an explicit <code>false</code> enables writes; missing or mistyped values stay read-only.</td><td><a href="#s-readonly">see effect</a></td></tr>
+        <tr><td><code>MSSQL_OUTPUT</code></td><td>.env</td><td>compact</td><td>One-line JSON with rows as arrays, or indented JSON with row objects.</td><td><a href="#s-output">see effect</a></td></tr>
+        <tr><td><code>MSSQL_RATE_MAX</code> <code>MSSQL_RATE_WINDOW_MS</code> <code>MSSQL_MAX_CONCURRENT</code></td><td>.env</td><td>30 / 60000 / 4</td><td>Throttle calls; 0 disables a limit.</td><td><a href="#s-rate">see effect</a></td></tr>
+        <tr><td><code>requestTimeout</code></td><td>databases.json · <code>MSSQL_REQUEST_TIMEOUT</code></td><td>30000 ms</td><td>Per-query timeout.</td><td></td></tr>
+        <tr><td><code>MSSQL_CONFIG</code></td><td>.env</td><td>databases.json</td><td>Path to the databases file (relative to mssql-mcp/).</td><td></td></tr>
+        <tr><td><code>MSSQL_LOG</code> <code>MSSQL_LOG_FILE</code></td><td>.env</td><td>false</td><td>Append every tool call and result to mcp.log.</td><td></td></tr>
+      </tbody>
+    </table></div>
+    <p class="precedence">Precedence: a database entry overrides <code>defaults</code>, which override built-in
+      defaults. User and password fall back to <code>MSSQL_USER</code> / <code>MSSQL_PASSWORD</code>. Variables set
+      in the client's <code>env</code> block override <code>.env</code>.</p>
+  </section>
+
+  <!-- ─────────────── Effects ─────────────── -->
+  <section class="part" id="effects">
+    <h2>How config changes the MCP</h2>
+    <p>Each comparison ran the server twice, once per configuration, and made the same tool calls. The blue strip
+      is the setting that differs; below it is exactly what the agent got back.</p>
+    <div id="scenarios"></div>
+  </section>
+
+  <!-- ─────────────── Tour ─────────────── -->
+  <section class="part" id="tour">
+    <h2>Tool tour</h2>
+    <p>The tools an agent typically calls first, with the base configuration.</p>
+    <div id="tour-cards"></div>
+  </section>
+
+  <footer id="foot"></footer>
+</main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+document.getElementById('base-config').textContent = JSON.stringify(D.base, null, 2);
+
+function callBlock(c, { pretty = false } = {}) {
+  const frag = document.createDocumentFragment();
+  const head = el('div', 'call-head');
+  head.append(el('span', 'tool', c.tool), el('span', 'args', JSON.stringify(c.args)),
+    el('span', 'badge ' + (c.isError ? 'err' : 'ok'), c.isError ? 'refused' : 'ok'));
+  let text = c.text;
+  if (pretty && !c.isError && text.startsWith('{')) text = JSON.stringify(JSON.parse(text), null, 2);
+  const looksJsonOneLine = !c.isError && text.startsWith('{') && !text.includes('\n');
+  frag.append(head, el('pre', (looksJsonOneLine || c.isError ? 'wrap ' : '') + (c.isError ? 'err-text' : ''), text));
+  return frag;
+}
+
+for (const s of D.scenarios) {
+  const sec = el('div', 'scenario'); sec.id = 's-' + s.id;
+  const meta = el('div', 'meta');
+  meta.append(el('h3', null, s.title), el('span', 'setting', s.setting));
+  sec.append(meta, el('p', null, s.blurb));
+  const grid = el('div', 'grid2');
+  for (const v of s.variants) {
+    const box = el('div', 'variant');
+    box.append(el('div', 'variant-label', v.label));
+    const cfg = el('div', 'cfg');
+    cfg.append(el('div', 'tag', 'config'), el('pre', 'wrap', v.snippet));
+    box.append(cfg);
+    for (const c of v.calls) box.append(callBlock(c));
+    if (s.id === 'output') {
+      const t = v.calls[0].text;
+      box.append(el('div', 'stat', `${t.split('\n').length} lines · ${t.length} characters · ~${Math.round(t.length / 4)} tokens`));
+    }
+    if (v.instructions) {
+      const ins = el('div', 'instr');
+      ins.append(el('div', 'tag', 'server instructions sent on connect'), el('pre', 'wrap', v.instructions.split('\n').filter(l => !l.startsWith('Pick the database')).join('\n')));
+      box.append(ins);
+    }
+    grid.append(box);
+  }
+  sec.append(grid);
+  document.getElementById('scenarios').append(sec);
+}
+
+const notes = {
+  list_databases: 'Pretty-printed here for reading; the server sent one line.',
+  describe_database: 'The whole schema in one call: PK primary key, ? nullable, -> foreign key.',
+  analyze_query: 'Pretty-printed here. The missing index on Orders.CustomerId shows as a full scan: 50,000 rows read to return 25.',
+};
+for (const c of D.tour.calls) {
+  const card = el('div', 'card');
+  card.append(callBlock(c, { pretty: c.tool !== 'describe_database' }));
+  if (notes[c.tool]) card.append(el('div', 'note', notes[c.tool]));
+  document.getElementById('tour-cards').append(card);
+}
+document.getElementById('foot').textContent = 'Captured ' + new Date(D.capturedAt).toLocaleString() +
+  ' from the local mssql-mcp-test container. Regenerate with: node showcase/capture.mjs';
+</script>
+</body>
+</html>
