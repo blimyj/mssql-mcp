@@ -17,13 +17,16 @@ It provides two main capabilities:
 
 | Tool | Description |
 |------|-------------|
+| `list_databases` | List the configured databases and their notes. |
+| `describe_database` | One-call schema overview: notes, then one line per table/view with columns, keys and row counts. |
 | `query` | Run a single `SELECT` and return the rows as JSON. |
 | `analyze_query` | Run a `SELECT` with statistics collection enabled and return performance metrics. |
 | `list_tables` | List tables and views in the current database. |
 | `describe_table` | Column names, types, nullability, and defaults for a table. |
 
-By default only `SELECT` and `WITH` statements are permitted. See
-[Security](#security).
+Every tool except `list_databases` takes an optional `db` argument naming a
+configured database (see [Multiple databases](#multiple-databases)). By default
+only `SELECT` and `WITH` statements are permitted. See [Security](#security).
 
 ## Requirements
 
@@ -119,13 +122,104 @@ Use the full path to `dist\index.js`, and double the backslashes in JSON. Start
 the client from the folder that contains its configuration file. Any `env`
 values set in the client configuration take precedence over `.env`.
 
+## Multiple databases
+
+Create `databases.json` next to `.env` (git-ignored; start from
+`databases.example.json`). When it exists it defines the databases, and `.env`
+only supplies fallbacks and secrets. Set `MSSQL_CONFIG` to use another path.
+
+```json
+{
+  "default": "sales",
+  "defaults": { "server": "sql.corp.example.com", "user": "reporting_user",
+                "passwordEnv": "MSSQL_PASSWORD", "excludeSchemas": ["audit"] },
+  "databases": {
+    "sales": { "database": "Sales", "description": "Amounts are in USD." },
+    "hr":    { "database": "HR", "user": "hr_reader", "passwordEnv": "HR_PASSWORD",
+               "descriptionFile": "descriptions/hr.md", "readonly": true }
+  }
+}
+```
+
+- Each entry inherits from `defaults`; `excludeSchemas` lists are merged.
+- `passwordEnv` names a variable in `.env`, so passwords stay out of this file.
+  `password` (literal) also works.
+- `readonly` overrides `MSSQL_READONLY` per database. Read-only is the default
+  when neither is set; only an explicit `false` allows writes.
+- Without the file, the server uses the single database in `.env`, named `default`.
+
+## Excluding schemas
+
+Schemas listed in `excludeSchemas` (per database) or `MSSQL_EXCLUDE_SCHEMAS`
+(comma-separated, every database) are hidden from `list_tables`,
+`describe_table` and `describe_database`, and queries naming them
+(`audit.X`, `[audit].X`, `Db.audit.X`) are rejected. Like the read-only check,
+this is best-effort: views, synonyms and unqualified names are not traced. Use
+`DENY` permissions for a hard boundary.
+
+When the user really needs an excluded schema, a tool call can pass
+`includeExcludedSchemas: true` to lift the exclusions for that call only; the
+refusal message tells the agent this flag exists. Set
+`"allowExcludedOverride": false` on a database (or
+`MSSQL_ALLOW_EXCLUDED_OVERRIDE=false` globally) to make exclusions absolute.
+
+A page showing each setting's effect with real responses lives in `showcase/`;
+regenerate it with `node showcase/capture.mjs`.
+
+## Database descriptor
+
+`describe_database` returns plain text an agent can read in one call:
+
+```
+Database "testshop" (TestShop on localhost), read-only.
+Notes:
+Orders.CustomerId is deliberately unindexed.
+Objects (5). Legend: PK primary key, ? nullable, -> foreign key.
+dbo.Orders (table ~50000 rows): OrderId int PK, CustomerId int -> dbo.Customers.CustomerId, Status nvarchar(20)
+```
+
+### Telling the agent what each database is for
+
+| Field | Sent on connect | In `describe_database` | Use it for |
+|-------|:---:|:---:|-----|
+| `summary` | ✓ | ✓ | What the database is and when to use it. Keep it to a line or two. |
+| `description` / `descriptionFile` | | ✓ | Everything else: how to query it, status codes, units, key tables. |
+
+The summary reaches the agent before it picks a database. The description is
+loaded when it calls `describe_database`, which the server tells it to do first.
+
+```json
+"sales": {
+  "database": "Sales",
+  "summary": "Orders and customers for the online store. Use for sales and revenue; not for staff data (use hr).",
+  "descriptionFile": "descriptions/sales.md"
+}
+```
+
+Without `summary`, the description's first line is used. In single-database
+mode use `MSSQL_SUMMARY` and `MSSQL_DESCRIPTION` / `MSSQL_DESCRIPTION_FILE`.
+Notes are guidance, not enforcement; for hard limits use `readonly`,
+`excludeSchemas` and database permissions.
+
+## Output format
+
+`MSSQL_OUTPUT=compact` (the default) returns single-line JSON with rows as
+arrays under one `columns` header:
+
+```json
+{"row_count":2,"truncated":false,"columns":["ProductId","Name"],"rows":[[1,"Product 1"],[2,"Product 2"]]}
+```
+
+`MSSQL_OUTPUT=pretty` restores indented JSON with rows as objects.
+
 ## analyze_query output
 
 ```jsonc
 {
   "row_count": 100,
   "truncated": false,
-  "rows": [ /* result rows, capped at maxRows */ ],
+  "columns": ["OrderId", "Amount"],
+  "rows": [ /* result rows as arrays, capped at maxRows */ ],
   "timing": { "cpu_ms": 53, "elapsed_ms": 53 },
   "io_by_table": [
     { "table": "Orders", "scan_count": 1, "logical_reads": 283,

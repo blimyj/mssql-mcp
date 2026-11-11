@@ -1,0 +1,33 @@
+{
+  "default": "sales",
+  "defaults": {
+    "server": "sqlserver.corp.example.com",
+    "port": 1433,
+    "user": "reporting_user",
+    "passwordEnv": "MSSQL_PASSWORD",
+    "encrypt": true,
+    "trustServerCertificate": false,
+    "readonly": true,
+    "excludeSchemas": [
+      "audit"
+    ]
+  },
+  "databases": {
+    "sales": {
+      "database": "Sales",
+      "summary": "Orders, customers and products for the online store. Use for sales and revenue; not for staff data (use hr).",
+      "description": "How to query:\n- Amounts are in USD.\n- Exclude Status = 'Cancelled' from revenue.\n- Prefer vCustomerSpend for per-customer totals.\n\nOrders.Status: Pending, Shipped, Delivered, Cancelled.",
+      "excludeSchemas": [
+        "staging"
+      ]
+    },
+    "hr": {
+      "server": "hr-sql.corp.example.com",
+      "user": "hr_reader",
+      "passwordEnv": "HR_PASSWORD",
+      "database": "HR",
+      "summary": "Employees, departments and payroll. Use for staff, headcount and department questions.",
+      "descriptionFile": "descriptions/hr.md"
+    }
+  }
+}
