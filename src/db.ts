@@ -1,26 +1,33 @@
 import sql from 'mssql';
-import { buildConfig } from './config.js';
+import { resolveDb, type DbEntry } from './config.js';
 
-let poolPromise: Promise<sql.ConnectionPool> | null = null;
+const pools = new Map<string, Promise<sql.ConnectionPool>>();
 
 /**
- * Lazily create and reuse a single connection pool. Reusing the pool is what
- * gives us persistent state across tool calls (no reconnect per query).
+ * Lazily create and reuse one connection pool per configured database.
+ * Reusing pools gives persistent state across tool calls (no reconnect per query).
  */
-export function getPool(): Promise<sql.ConnectionPool> {
-  if (!poolPromise) {
-    const pool = new sql.ConnectionPool(buildConfig());
-    poolPromise = pool.connect().catch((err) => {
-      poolPromise = null; // allow a later retry after a failed connect
+export function getPool(db: DbEntry | string | undefined): Promise<sql.ConnectionPool> {
+  const entry = typeof db === 'object' ? db : resolveDb(db);
+  let p = pools.get(entry.name);
+  if (!p) {
+    const pool = new sql.ConnectionPool(entry.sql);
+    p = pool.connect().catch((err) => {
+      pools.delete(entry.name); // allow a later retry after a failed connect
       throw err;
     });
+    pools.set(entry.name, p);
   }
-  return poolPromise;
+  return p;
 }
 
-export async function closePool(): Promise<void> {
-  if (!poolPromise) return;
-  const pool = await poolPromise.catch(() => null);
-  if (pool) await pool.close();
-  poolPromise = null;
+export async function closePools(): Promise<void> {
+  const all = [...pools.values()];
+  pools.clear();
+  await Promise.all(
+    all.map(async (p) => {
+      const pool = await p.catch(() => null);
+      if (pool) await pool.close();
+    })
+  );
 }

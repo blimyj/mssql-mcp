@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 local-*
+databases.json
+showcase/configs/
+opencode.json

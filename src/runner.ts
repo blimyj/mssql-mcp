@@ -1,4 +1,6 @@
 import { getPool } from './db.js';
+import type { DbEntry } from './config.js';
+import { shapeRows } from './output.js';
 import { parseShowplan } from './showplan.js';
 
 /** A SHOWPLAN result set is a single column holding the plan XML. */
@@ -46,8 +48,8 @@ function parseTime(infos: string[]) {
   return last;
 }
 
-export async function runQuery(cleanSql: string, maxRows: number) {
-  const pool = await getPool();
+export async function runQuery(db: DbEntry, cleanSql: string, maxRows: number) {
+  const pool = await getPool(db);
   const result: any = await pool.request().query(cleanSql);
   const recordsets: any[] = result.recordsets ?? [];
   const data = recordsets.filter((rs) => !isShowplan(rs));
@@ -56,16 +58,17 @@ export async function runQuery(cleanSql: string, maxRows: number) {
   return {
     row_count: rows.length,
     truncated,
-    rows: truncated ? rows.slice(0, maxRows) : rows,
+    ...shapeRows(truncated ? rows.slice(0, maxRows) : rows, rows.columns),
   };
 }
 
 export async function runAnalyze(
+  db: DbEntry,
   cleanSql: string,
   maxRows: number,
   includePlanXml: boolean
 ) {
-  const pool = await getPool();
+  const pool = await getPool(db);
   const request = pool.request();
 
   // STATISTICS IO / TIME arrive on the info-message channel, separate from rows.
@@ -101,7 +104,7 @@ export async function runAnalyze(
   return {
     row_count: rows.length,
     truncated,
-    rows: truncated ? rows.slice(0, maxRows) : rows,
+    ...shapeRows(truncated ? rows.slice(0, maxRows) : rows, rows.columns),
     timing: plan?.timing ?? parseTime(infos),
     io_by_table: parseIo(infos),
     statement: plan?.statement,
